@@ -1,34 +1,59 @@
+import argparse
+
 import requests
 
-# Change this to your GitHub username
 USERNAME = "Shashwat-Aneja"
+API_TIMEOUT_SECONDS = 10
+REPOSITORIES_PER_PAGE = 100
 
-def fetch_github_data(username):
+
+def fetch_github_data(username, session=None):
+    """Fetch profile statistics and all public repositories with bounded requests."""
+    client = session or requests
     api_url = f"https://api.github.com/users/{username}"
-    repos_url = f"https://api.github.com/users/{username}/repos"
+    repos_url = f"{api_url}/repos"
 
-    user_data = requests.get(api_url).json()
-    repos_data = requests.get(repos_url).json()
+    profile_response = client.get(api_url, timeout=API_TIMEOUT_SECONDS)
+    profile_response.raise_for_status()
+    user_data = profile_response.json()
+    if not isinstance(user_data, dict):
+        raise ValueError("GitHub profile response was not a JSON object.")
 
-    total_stars = sum(repo.get('stargazers_count', 0) for repo in repos_data)
+    repos_data = []
+    page = 1
+    while True:
+        response = client.get(
+            repos_url,
+            params={"per_page": REPOSITORIES_PER_PAGE, "page": page, "type": "owner"},
+            timeout=API_TIMEOUT_SECONDS,
+        )
+        response.raise_for_status()
+        page_repositories = response.json()
+        if not isinstance(page_repositories, list):
+            raise ValueError("GitHub repositories response was not a JSON array.")
+        repos_data.extend(page_repositories)
+        if len(page_repositories) < REPOSITORIES_PER_PAGE:
+            break
+        page += 1
+
+    total_stars = sum(repo.get("stargazers_count", 0) for repo in repos_data)
     languages = {}
-
     for repo in repos_data:
-        lang = repo.get('language')
-        if lang:
-            languages[lang] = languages.get(lang, 0) + 1
+        language = repo.get("language")
+        if language:
+            languages[language] = languages.get(language, 0) + 1
 
     most_used_language = max(languages, key=languages.get) if languages else "Not available"
-
     return {
         "Username": username,
-        "Name": user_data.get("name", "Not available"),
+        "Name": user_data.get("name") or "Not available",
         "Public Repositories": user_data.get("public_repos", "Not available"),
         "Followers": user_data.get("followers", "Not available"),
         "Following": user_data.get("following", "Not available"),
         "Total Stars": total_stars,
-        "Most Used Language": most_used_language
+        "Most Used Language": most_used_language,
     }
+
 
 def display_data(data):
     print("\n=== GitHub Profile Analysis ===")
@@ -36,7 +61,18 @@ def display_data(data):
         print(f"{key}: {value}")
     print("================================\n")
 
-if __name__ == "__main__":
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description="Summarize a public GitHub profile.")
+    parser.add_argument("username", nargs="?", default=USERNAME, help="GitHub username to analyze")
+    args = parser.parse_args(argv)
     print("Fetching GitHub data...")
-    stats = fetch_github_data(USERNAME)
+    try:
+        stats = fetch_github_data(args.username)
+    except (requests.RequestException, ValueError) as exc:
+        parser.exit(1, f"Error fetching GitHub profile: {exc}\n")
     display_data(stats)
+
+
+if __name__ == "__main__":
+    main()
