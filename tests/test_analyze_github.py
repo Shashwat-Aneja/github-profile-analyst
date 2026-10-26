@@ -50,6 +50,8 @@ def test_fetch_github_data_aggregates_all_repository_pages():
     assert stats["Total Stars"] == 5055
     assert stats["Most Used Language"] == "Python"
     assert stats["Public Repositories"] == 102
+    assert stats["Original Repositories"] == 102
+    assert stats["Forked Repositories"] == 0
     assert len(session.calls) == 3
     assert all(call[2] == 10 for call in session.calls)
 
@@ -73,3 +75,20 @@ def test_empty_language_metadata_has_safe_fallback():
     stats = fetch_github_data("demo-user", session=EmptyLanguageSession())
 
     assert stats["Most Used Language"] == "Not available"
+
+
+def test_repository_summary_distinguishes_forks_from_originals():
+    class ForkAwareSession:
+        def get(self, url, params=None, timeout=None):
+            if url.endswith("/repos"):
+                return FakeResponse([
+                    {"fork": False, "stargazers_count": 4, "language": "Python"},
+                    {"fork": True, "stargazers_count": 2, "language": "Python"},
+                    {"fork": False, "stargazers_count": 1, "language": "Rust"},
+                ])
+            return FakeResponse({"public_repos": 3, "followers": 0, "following": 0})
+
+    stats = fetch_github_data("demo-user", session=ForkAwareSession())
+
+    assert stats["Original Repositories"] == 2
+    assert stats["Forked Repositories"] == 1
