@@ -37,6 +37,8 @@ def fetch_github_data(username, session=None):
         page += 1
 
     total_stars = sum(repo.get("stargazers_count", 0) for repo in repos_data)
+    forked_repositories = sum(1 for repo in repos_data if repo.get("fork") is True)
+    original_repositories = len(repos_data) - forked_repositories
     languages = {}
     for repo in repos_data:
         language = repo.get("language")
@@ -48,6 +50,8 @@ def fetch_github_data(username, session=None):
         "Username": username,
         "Name": user_data.get("name") or "Not available",
         "Public Repositories": user_data.get("public_repos", "Not available"),
+        "Original Repositories": original_repositories,
+        "Forked Repositories": forked_repositories,
         "Followers": user_data.get("followers", "Not available"),
         "Following": user_data.get("following", "Not available"),
         "Total Stars": total_stars,
