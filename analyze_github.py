@@ -1,14 +1,27 @@
 import argparse
+import re
 
 import requests
 
 USERNAME = "Shashwat-Aneja"
+USERNAME_PATTERN = re.compile(r"^(?!.*--)[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$")
 API_TIMEOUT_SECONDS = 10
 REPOSITORIES_PER_PAGE = 100
 
 
+def validate_username(username):
+    """Reject values that cannot be GitHub account logins before making a request."""
+    if not isinstance(username, str) or not USERNAME_PATTERN.fullmatch(username):
+        raise ValueError(
+            "GitHub username must be 1-39 characters, use letters, digits, or single hyphens, "
+            "and cannot start or end with a hyphen."
+        )
+    return username
+
+
 def fetch_github_data(username, session=None):
     """Fetch profile statistics and all public repositories with bounded requests."""
+    validate_username(username)
     client = session or requests
     api_url = f"https://api.github.com/users/{username}"
     repos_url = f"{api_url}/repos"
