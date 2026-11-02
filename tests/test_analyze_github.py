@@ -92,3 +92,24 @@ def test_repository_summary_distinguishes_forks_from_originals():
 
     assert stats["Original Repositories"] == 2
     assert stats["Forked Repositories"] == 1
+
+
+@pytest.mark.parametrize(
+    "username",
+    ["", "-demo", "demo-", "demo--user", "demo/user", "two words", "a" * 40],
+)
+def test_invalid_github_usernames_are_rejected_before_network_access(username):
+    class NoRequestSession:
+        def __init__(self):
+            self.calls = 0
+
+        def get(self, *_args, **_kwargs):
+            self.calls += 1
+            raise AssertionError("invalid usernames must not trigger requests")
+
+    session = NoRequestSession()
+
+    with pytest.raises(ValueError, match="GitHub username"):
+        fetch_github_data(username, session=session)
+
+    assert session.calls == 0
