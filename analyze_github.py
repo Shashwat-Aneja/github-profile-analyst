@@ -19,6 +19,35 @@ def validate_username(username):
     return username
 
 
+def _validate_repository_page(payload, page):
+    """Validate GitHub repository records before aggregating profile statistics."""
+    if not isinstance(payload, list):
+        raise ValueError(f"GitHub repositories response on page {page} was not a JSON array.")
+
+    for index, repository in enumerate(payload, start=1):
+        if not isinstance(repository, dict):
+            raise ValueError(
+                f"GitHub repository entry {index} on page {page} must be a JSON object."
+            )
+        stars = repository.get("stargazers_count", 0)
+        if isinstance(stars, bool) or not isinstance(stars, int) or stars < 0:
+            raise ValueError(
+                f"GitHub repository entry {index} on page {page} has an invalid stargazers_count."
+            )
+        fork = repository.get("fork", False)
+        if not isinstance(fork, bool):
+            raise ValueError(
+                f"GitHub repository entry {index} on page {page} has an invalid fork flag."
+            )
+        language = repository.get("language")
+        if language is not None and not isinstance(language, str):
+            raise ValueError(
+                f"GitHub repository entry {index} on page {page} has an invalid language."
+            )
+
+    return payload
+
+
 def fetch_github_data(username, session=None):
     """Fetch profile statistics and all public repositories with bounded requests."""
     validate_username(username)
@@ -41,9 +70,7 @@ def fetch_github_data(username, session=None):
             timeout=API_TIMEOUT_SECONDS,
         )
         response.raise_for_status()
-        page_repositories = response.json()
-        if not isinstance(page_repositories, list):
-            raise ValueError("GitHub repositories response was not a JSON array.")
+        page_repositories = _validate_repository_page(response.json(), page)
         repos_data.extend(page_repositories)
         if len(page_repositories) < REPOSITORIES_PER_PAGE:
             break
