@@ -60,6 +60,11 @@ def fetch_github_data(username, session=None):
     user_data = profile_response.json()
     if not isinstance(user_data, dict):
         raise ValueError("GitHub profile response was not a JSON object.")
+    for field in ("public_repos", "followers", "following"):
+        if field in user_data:
+            count = user_data[field]
+            if isinstance(count, bool) or not isinstance(count, int) or count < 0:
+                raise ValueError(f"GitHub profile field {field} must be a non-negative integer.")
 
     repos_data = []
     page = 1
