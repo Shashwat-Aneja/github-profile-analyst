@@ -153,7 +153,7 @@ def test_full_pages_stop_at_configured_pagination_limit(monkeypatch):
                 return FakeResponse({"public_repos": 300})
             self.repository_calls += 1
             offset = (params["page"] - 1) * 100
-            return FakeResponse([{"id": offset + index} for index in range(100)])
+            return FakeResponse([{"id": offset + index + 1} for index in range(100)])
 
     session = EndlessSession()
     with pytest.raises(ValueError, match="safety page limit"):
