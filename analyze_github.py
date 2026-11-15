@@ -7,6 +7,7 @@ USERNAME = "Shashwat-Aneja"
 USERNAME_PATTERN = re.compile(r"^(?!.*--)[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$")
 API_TIMEOUT_SECONDS = 10
 REPOSITORIES_PER_PAGE = 100
+MAX_REPOSITORY_PAGES = 1000
 
 
 def validate_username(username):
@@ -73,6 +74,8 @@ def fetch_github_data(username, session=None):
     seen_repository_ids = set()
     page = 1
     while True:
+        if page > MAX_REPOSITORY_PAGES:
+            raise ValueError("GitHub repository pagination exceeded the safety page limit.")
         response = client.get(
             repos_url,
             params={"per_page": REPOSITORIES_PER_PAGE, "page": page, "type": "owner"},
