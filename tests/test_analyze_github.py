@@ -137,3 +137,25 @@ def test_invalid_repository_id_is_rejected():
 
     with pytest.raises(ValueError, match="invalid id"):
         fetch_github_data("demo-user", session=InvalidIdSession())
+
+
+def test_full_pages_stop_at_configured_pagination_limit(monkeypatch):
+    import analyze_github
+
+    monkeypatch.setattr(analyze_github, "MAX_REPOSITORY_PAGES", 2)
+
+    class EndlessSession:
+        def __init__(self):
+            self.repository_calls = 0
+
+        def get(self, url, params=None, timeout=None):
+            if not url.endswith("/repos"):
+                return FakeResponse({"public_repos": 300})
+            self.repository_calls += 1
+            offset = (params["page"] - 1) * 100
+            return FakeResponse([{"id": offset + index} for index in range(100)])
+
+    session = EndlessSession()
+    with pytest.raises(ValueError, match="safety page limit"):
+        fetch_github_data("demo-user", session=session)
+    assert session.repository_calls == 2
