@@ -29,6 +29,9 @@ def _validate_repository_page(payload, page):
             raise ValueError(
                 f"GitHub repository entry {index} on page {page} must be a JSON object."
             )
+        repository_id = repository.get("id")
+        if repository_id is not None and (isinstance(repository_id, bool) or not isinstance(repository_id, int) or repository_id < 1):
+            raise ValueError(f"GitHub repository entry {index} on page {page} has an invalid id.")
         stars = repository.get("stargazers_count", 0)
         if isinstance(stars, bool) or not isinstance(stars, int) or stars < 0:
             raise ValueError(
@@ -67,6 +70,7 @@ def fetch_github_data(username, session=None):
                 raise ValueError(f"GitHub profile field {field} must be a non-negative integer.")
 
     repos_data = []
+    seen_repository_ids = set()
     page = 1
     while True:
         response = client.get(
@@ -76,6 +80,12 @@ def fetch_github_data(username, session=None):
         )
         response.raise_for_status()
         page_repositories = _validate_repository_page(response.json(), page)
+        for repository in page_repositories:
+            repository_id = repository.get("id")
+            if repository_id is not None:
+                if repository_id in seen_repository_ids:
+                    raise ValueError("GitHub repository pagination returned a duplicate repository id.")
+                seen_repository_ids.add(repository_id)
         repos_data.extend(page_repositories)
         if len(page_repositories) < REPOSITORIES_PER_PAGE:
             break
