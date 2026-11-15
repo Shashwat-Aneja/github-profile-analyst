@@ -113,3 +113,27 @@ def test_invalid_github_usernames_are_rejected_before_network_access(username):
         fetch_github_data(username, session=session)
 
     assert session.calls == 0
+
+
+def test_duplicate_repository_ids_across_pages_are_rejected():
+    class RepeatedRepositorySession:
+        def get(self, url, params=None, timeout=None):
+            if not url.endswith("/repos"):
+                return FakeResponse({"public_repos": 101})
+            if params["page"] == 1:
+                return FakeResponse([{"id": index, "stargazers_count": 1} for index in range(1, 101)])
+            return FakeResponse([{"id": 1, "stargazers_count": 1}])
+
+    with pytest.raises(ValueError, match="duplicate repository id"):
+        fetch_github_data("demo-user", session=RepeatedRepositorySession())
+
+
+def test_invalid_repository_id_is_rejected():
+    class InvalidIdSession:
+        def get(self, url, params=None, timeout=None):
+            if url.endswith("/repos"):
+                return FakeResponse([{"id": True, "stargazers_count": 1}])
+            return FakeResponse({"public_repos": 1})
+
+    with pytest.raises(ValueError, match="invalid id"):
+        fetch_github_data("demo-user", session=InvalidIdSession())
