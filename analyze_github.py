@@ -103,7 +103,7 @@ def fetch_github_data(username, session=None):
         if language:
             languages[language] = languages.get(language, 0) + 1
 
-    most_used_language = max(languages, key=languages.get) if languages else "Not available"
+    most_used_language = min(languages, key=lambda language: (-languages[language], language)) if languages else "Not available"
     return {
         "Username": username,
         "Name": user_data.get("name") or "Not available",
