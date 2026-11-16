@@ -59,3 +59,5 @@ github-profile-analyst/
 ---
 
 Built by **Shashwat Aneja**
+
+For a machine-readable summary without progress messages, run `python analyze_github.py USERNAME --json`. Tied language counts are resolved alphabetically.

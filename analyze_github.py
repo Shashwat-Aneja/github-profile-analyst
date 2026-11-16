@@ -1,4 +1,5 @@
 import argparse
+import json
 import re
 
 import requests
@@ -127,13 +128,18 @@ def display_data(data):
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Summarize a public GitHub profile.")
     parser.add_argument("username", nargs="?", default=USERNAME, help="GitHub username to analyze")
+    parser.add_argument("--json", action="store_true", help="Print only a JSON profile summary")
     args = parser.parse_args(argv)
-    print("Fetching GitHub data...")
+    if not args.json:
+        print("Fetching GitHub data...")
     try:
         stats = fetch_github_data(args.username)
     except (requests.RequestException, ValueError) as exc:
         parser.exit(1, f"Error fetching GitHub profile: {exc}\n")
-    display_data(stats)
+    if args.json:
+        print(json.dumps(stats, ensure_ascii=False))
+    else:
+        display_data(stats)
 
 
 if __name__ == "__main__":
