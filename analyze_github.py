@@ -78,7 +78,7 @@ def fetch_github_data(username, session=None):
             raise ValueError("GitHub repository pagination exceeded the safety page limit.")
         response = client.get(
             repos_url,
-            params={"per_page": REPOSITORIES_PER_PAGE, "page": page, "type": "owner"},
+            params={"per_page": REPOSITORIES_PER_PAGE, "page": page, "type": "owner", "sort": "full_name", "direction": "asc"},
             timeout=API_TIMEOUT_SECONDS,
         )
         response.raise_for_status()
