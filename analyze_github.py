@@ -53,7 +53,7 @@ def _validate_repository_page(payload, page):
     return payload
 
 
-def fetch_github_data(username, session=None):
+def fetch_github_data(username, session=None, exclude_forks=False, exclude_archived=False):
     """Fetch profile statistics and all public repositories with bounded requests."""
     validate_username(username)
     client = session or requests
@@ -95,6 +95,10 @@ def fetch_github_data(username, session=None):
             break
         page += 1
 
+    if exclude_forks:
+        repos_data = [repository for repository in repos_data if not repository.get("fork", False)]
+    if exclude_archived:
+        repos_data = [repository for repository in repos_data if not repository.get("archived", False)]
     total_stars = sum(repo.get("stargazers_count", 0) for repo in repos_data)
     forked_repositories = sum(1 for repo in repos_data if repo.get("fork") is True)
     original_repositories = len(repos_data) - forked_repositories
@@ -129,11 +133,18 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description="Summarize a public GitHub profile.")
     parser.add_argument("username", nargs="?", default=USERNAME, help="GitHub username to analyze")
     parser.add_argument("--json", action="store_true", help="Print only a JSON profile summary")
+    parser.add_argument("--exclude-forks", action="store_true", help="Exclude forks from repository metrics")
+    parser.add_argument("--exclude-archived", action="store_true", help="Exclude archived repositories from metrics")
     args = parser.parse_args(argv)
     if not args.json:
         print("Fetching GitHub data...")
     try:
-        stats = fetch_github_data(args.username)
+        options = {}
+        if args.exclude_forks:
+            options["exclude_forks"] = True
+        if args.exclude_archived:
+            options["exclude_archived"] = True
+        stats = fetch_github_data(args.username, **options)
     except (requests.RequestException, ValueError) as exc:
         parser.exit(1, f"Error fetching GitHub profile: {exc}\n")
     if args.json:

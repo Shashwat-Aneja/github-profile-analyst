@@ -61,3 +61,5 @@ github-profile-analyst/
 Built by **Shashwat Aneja**
 
 For a machine-readable summary without progress messages, run `python analyze_github.py USERNAME --json`. Tied language counts are resolved alphabetically.
+
+`--exclude-forks` and `--exclude-archived` filter repository aggregates. The profile’s Public Repositories field retains GitHub’s account-wide count.
