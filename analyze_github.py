@@ -1,5 +1,6 @@
 import argparse
 import json
+import os
 import re
 
 import requests
@@ -53,14 +54,19 @@ def _validate_repository_page(payload, page):
     return payload
 
 
-def fetch_github_data(username, session=None, exclude_forks=False, exclude_archived=False):
+def fetch_github_data(username, session=None, exclude_forks=False, exclude_archived=False, token=None):
     """Fetch profile statistics and all public repositories with bounded requests."""
     validate_username(username)
     client = session or requests
     api_url = f"https://api.github.com/users/{username}"
     repos_url = f"{api_url}/repos"
 
-    profile_response = client.get(api_url, timeout=API_TIMEOUT_SECONDS)
+    request_options = {"timeout": API_TIMEOUT_SECONDS}
+    if token is not None:
+        if not isinstance(token, str) or not token.strip() or any(char.isspace() for char in token):
+            raise ValueError("GitHub token must be a non-empty token without whitespace.")
+        request_options["headers"] = {"Authorization": f"Bearer {token}"}
+    profile_response = client.get(api_url, **request_options)
     profile_response.raise_for_status()
     user_data = profile_response.json()
     if not isinstance(user_data, dict):
@@ -80,7 +86,7 @@ def fetch_github_data(username, session=None, exclude_forks=False, exclude_archi
         response = client.get(
             repos_url,
             params={"per_page": REPOSITORIES_PER_PAGE, "page": page, "type": "owner", "sort": "full_name", "direction": "asc"},
-            timeout=API_TIMEOUT_SECONDS,
+            **request_options,
         )
         response.raise_for_status()
         page_repositories = _validate_repository_page(response.json(), page)
@@ -140,6 +146,8 @@ def main(argv=None):
         print("Fetching GitHub data...")
     try:
         options = {}
+        if os.environ.get("GITHUB_TOKEN"):
+            options["token"] = os.environ["GITHUB_TOKEN"]
         if args.exclude_forks:
             options["exclude_forks"] = True
         if args.exclude_archived:
