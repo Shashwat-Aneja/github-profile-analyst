@@ -1,4 +1,6 @@
 import argparse
+import json
+import os
 import re
 
 import requests
@@ -52,14 +54,19 @@ def _validate_repository_page(payload, page):
     return payload
 
 
-def fetch_github_data(username, session=None):
+def fetch_github_data(username, session=None, exclude_forks=False, exclude_archived=False, token=None):
     """Fetch profile statistics and all public repositories with bounded requests."""
     validate_username(username)
     client = session or requests
     api_url = f"https://api.github.com/users/{username}"
     repos_url = f"{api_url}/repos"
 
-    profile_response = client.get(api_url, timeout=API_TIMEOUT_SECONDS)
+    request_options = {"timeout": API_TIMEOUT_SECONDS}
+    if token is not None:
+        if not isinstance(token, str) or not token.strip() or any(char.isspace() for char in token):
+            raise ValueError("GitHub token must be a non-empty token without whitespace.")
+        request_options["headers"] = {"Authorization": f"Bearer {token}"}
+    profile_response = client.get(api_url, **request_options)
     profile_response.raise_for_status()
     user_data = profile_response.json()
     if not isinstance(user_data, dict):
@@ -78,8 +85,8 @@ def fetch_github_data(username, session=None):
             raise ValueError("GitHub repository pagination exceeded the safety page limit.")
         response = client.get(
             repos_url,
-            params={"per_page": REPOSITORIES_PER_PAGE, "page": page, "type": "owner"},
-            timeout=API_TIMEOUT_SECONDS,
+            params={"per_page": REPOSITORIES_PER_PAGE, "page": page, "type": "owner", "sort": "full_name", "direction": "asc"},
+            **request_options,
         )
         response.raise_for_status()
         page_repositories = _validate_repository_page(response.json(), page)
@@ -94,6 +101,10 @@ def fetch_github_data(username, session=None):
             break
         page += 1
 
+    if exclude_forks:
+        repos_data = [repository for repository in repos_data if not repository.get("fork", False)]
+    if exclude_archived:
+        repos_data = [repository for repository in repos_data if not repository.get("archived", False)]
     total_stars = sum(repo.get("stargazers_count", 0) for repo in repos_data)
     forked_repositories = sum(1 for repo in repos_data if repo.get("fork") is True)
     original_repositories = len(repos_data) - forked_repositories
@@ -103,7 +114,7 @@ def fetch_github_data(username, session=None):
         if language:
             languages[language] = languages.get(language, 0) + 1
 
-    most_used_language = max(languages, key=languages.get) if languages else "Not available"
+    most_used_language = min(languages, key=lambda language: (-languages[language], language)) if languages else "Not available"
     return {
         "Username": username,
         "Name": user_data.get("name") or "Not available",
@@ -127,13 +138,27 @@ def display_data(data):
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Summarize a public GitHub profile.")
     parser.add_argument("username", nargs="?", default=USERNAME, help="GitHub username to analyze")
+    parser.add_argument("--json", action="store_true", help="Print only a JSON profile summary")
+    parser.add_argument("--exclude-forks", action="store_true", help="Exclude forks from repository metrics")
+    parser.add_argument("--exclude-archived", action="store_true", help="Exclude archived repositories from metrics")
     args = parser.parse_args(argv)
-    print("Fetching GitHub data...")
+    if not args.json:
+        print("Fetching GitHub data...")
     try:
-        stats = fetch_github_data(args.username)
+        options = {}
+        if os.environ.get("GITHUB_TOKEN"):
+            options["token"] = os.environ["GITHUB_TOKEN"]
+        if args.exclude_forks:
+            options["exclude_forks"] = True
+        if args.exclude_archived:
+            options["exclude_archived"] = True
+        stats = fetch_github_data(args.username, **options)
     except (requests.RequestException, ValueError) as exc:
         parser.exit(1, f"Error fetching GitHub profile: {exc}\n")
-    display_data(stats)
+    if args.json:
+        print(json.dumps(stats, ensure_ascii=False))
+    else:
+        display_data(stats)
 
 
 if __name__ == "__main__":
