@@ -54,6 +54,22 @@ def _validate_repository_page(payload, page):
     return payload
 
 
+def request_with_retry(client, url, **options):
+    """Retry transient, read-only API failures once; do not retry auth/rate limits."""
+    for attempt in range(2):
+        try:
+            response = client.get(url, **options)
+            response.raise_for_status()
+            return response
+        except (requests.Timeout, requests.ConnectionError):
+            if attempt:
+                raise
+        except requests.HTTPError as exc:
+            status = getattr(exc.response, "status_code", None)
+            if attempt or status not in {500, 502, 503, 504}:
+                raise
+
+
 def fetch_github_data(username, session=None, exclude_forks=False, exclude_archived=False, token=None):
     """Fetch profile statistics and all public repositories with bounded requests."""
     validate_username(username)
@@ -66,8 +82,7 @@ def fetch_github_data(username, session=None, exclude_forks=False, exclude_archi
         if not isinstance(token, str) or not token.strip() or any(char.isspace() for char in token):
             raise ValueError("GitHub token must be a non-empty token without whitespace.")
         request_options["headers"] = {"Authorization": f"Bearer {token}"}
-    profile_response = client.get(api_url, **request_options)
-    profile_response.raise_for_status()
+    profile_response = request_with_retry(client, api_url, **request_options)
     user_data = profile_response.json()
     if not isinstance(user_data, dict):
         raise ValueError("GitHub profile response was not a JSON object.")
@@ -83,12 +98,11 @@ def fetch_github_data(username, session=None, exclude_forks=False, exclude_archi
     while True:
         if page > MAX_REPOSITORY_PAGES:
             raise ValueError("GitHub repository pagination exceeded the safety page limit.")
-        response = client.get(
-            repos_url,
+        response = request_with_retry(
+            client, repos_url,
             params={"per_page": REPOSITORIES_PER_PAGE, "page": page, "type": "owner", "sort": "full_name", "direction": "asc"},
             **request_options,
         )
-        response.raise_for_status()
         page_repositories = _validate_repository_page(response.json(), page)
         for repository in page_repositories:
             repository_id = repository.get("id")

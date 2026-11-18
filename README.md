@@ -65,3 +65,5 @@ For a machine-readable summary without progress messages, run `python analyze_gi
 `--exclude-forks` and `--exclude-archived` filter repository aggregates. The profile’s Public Repositories field retains GitHub’s account-wide count.
 
 Set `GITHUB_TOKEN` to authenticate public profile API requests with a higher rate limit. The token is sent only in the Authorization header and is never included in report output or URLs.
+
+Read-only profile and repository requests retry one timeout, connection failure or HTTP 500/502/503/504 response. Authentication and rate-limit failures are returned immediately; every attempt retains the configured network timeout.
