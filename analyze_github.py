@@ -27,6 +27,8 @@ def _validate_repository_page(payload, page):
     if not isinstance(payload, list):
         raise ValueError(f"GitHub repositories response on page {page} was not a JSON array.")
 
+    if len(payload) > REPOSITORIES_PER_PAGE:
+        raise ValueError(f"GitHub repositories response on page {page} exceeded the requested page size.")
     for index, repository in enumerate(payload, start=1):
         if not isinstance(repository, dict):
             raise ValueError(
