@@ -137,6 +137,8 @@ def fetch_github_data(username, session=None, exclude_forks=False, exclude_archi
         "Username": username,
         "Name": user_data.get("name") or "Not available",
         "Public Repositories": user_data.get("public_repos", "Not available"),
+        "Analyzed Repositories": len(repos_data),
+        "Language Repositories": dict(sorted(languages.items())),
         "Original Repositories": original_repositories,
         "Forked Repositories": forked_repositories,
         "Followers": user_data.get("followers", "Not available"),
