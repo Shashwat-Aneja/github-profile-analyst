@@ -27,6 +27,8 @@ def _validate_repository_page(payload, page):
     if not isinstance(payload, list):
         raise ValueError(f"GitHub repositories response on page {page} was not a JSON array.")
 
+    if len(payload) > REPOSITORIES_PER_PAGE:
+        raise ValueError(f"GitHub repositories response on page {page} exceeded the requested page size.")
     for index, repository in enumerate(payload, start=1):
         if not isinstance(repository, dict):
             raise ValueError(
@@ -45,6 +47,8 @@ def _validate_repository_page(payload, page):
             raise ValueError(
                 f"GitHub repository entry {index} on page {page} has an invalid fork flag."
             )
+        if "archived" in repository and not isinstance(repository["archived"], bool):
+            raise ValueError(f"GitHub repository entry {index} on page {page} has an invalid archived flag.")
         language = repository.get("language")
         if language is not None and not isinstance(language, str):
             raise ValueError(
@@ -133,6 +137,8 @@ def fetch_github_data(username, session=None, exclude_forks=False, exclude_archi
         "Username": username,
         "Name": user_data.get("name") or "Not available",
         "Public Repositories": user_data.get("public_repos", "Not available"),
+        "Analyzed Repositories": len(repos_data),
+        "Language Repositories": dict(sorted(languages.items())),
         "Original Repositories": original_repositories,
         "Forked Repositories": forked_repositories,
         "Followers": user_data.get("followers", "Not available"),
