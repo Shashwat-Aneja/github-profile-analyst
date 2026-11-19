@@ -45,6 +45,8 @@ def _validate_repository_page(payload, page):
             raise ValueError(
                 f"GitHub repository entry {index} on page {page} has an invalid fork flag."
             )
+        if "archived" in repository and not isinstance(repository["archived"], bool):
+            raise ValueError(f"GitHub repository entry {index} on page {page} has an invalid archived flag.")
         language = repository.get("language")
         if language is not None and not isinstance(language, str):
             raise ValueError(
