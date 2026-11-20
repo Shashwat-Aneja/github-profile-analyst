@@ -74,9 +74,11 @@ def request_with_retry(client, url, **options):
                 raise
 
 
-def fetch_github_data(username, session=None, exclude_forks=False, exclude_archived=False, token=None):
+def fetch_github_data(username, session=None, exclude_forks=False, exclude_archived=False, token=None, min_stars=0):
     """Fetch profile statistics and all public repositories with bounded requests."""
     validate_username(username)
+    if not isinstance(min_stars, int) or isinstance(min_stars, bool) or min_stars < 0:
+        raise ValueError("min_stars must be a non-negative integer.")
     client = session or requests
     api_url = f"https://api.github.com/users/{username}"
     repos_url = f"{api_url}/repos"
@@ -123,6 +125,7 @@ def fetch_github_data(username, session=None, exclude_forks=False, exclude_archi
         repos_data = [repository for repository in repos_data if not repository.get("fork", False)]
     if exclude_archived:
         repos_data = [repository for repository in repos_data if not repository.get("archived", False)]
+    repos_data = [repo for repo in repos_data if repo.get("stargazers_count", 0) >= min_stars]
     total_stars = sum(repo.get("stargazers_count", 0) for repo in repos_data)
     forked_repositories = sum(1 for repo in repos_data if repo.get("fork") is True)
     original_repositories = len(repos_data) - forked_repositories
@@ -161,6 +164,7 @@ def main(argv=None):
     parser.add_argument("--json", action="store_true", help="Print only a JSON profile summary")
     parser.add_argument("--exclude-forks", action="store_true", help="Exclude forks from repository metrics")
     parser.add_argument("--exclude-archived", action="store_true", help="Exclude archived repositories from metrics")
+    parser.add_argument("--min-stars", type=int, default=0, help="Include only repositories with at least this many stars")
     args = parser.parse_args(argv)
     if not args.json:
         print("Fetching GitHub data...")
@@ -172,6 +176,8 @@ def main(argv=None):
             options["exclude_forks"] = True
         if args.exclude_archived:
             options["exclude_archived"] = True
+        if args.min_stars:
+            options["min_stars"] = args.min_stars
         stats = fetch_github_data(args.username, **options)
     except (requests.RequestException, ValueError) as exc:
         parser.exit(1, f"Error fetching GitHub profile: {exc}\n")

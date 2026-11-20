@@ -69,3 +69,5 @@ Set `GITHUB_TOKEN` to authenticate public profile API requests with a higher rat
 Read-only profile and repository requests retry one timeout, connection failure or HTTP 500/502/503/504 response. Authentication and rate-limit failures are returned immediately; every attempt retains the configured network timeout.
 
 `Analyzed Repositories` identifies the scope after optional exclusions; `Language Repositories` reports a sorted count by primary language. GitHub’s `Public Repositories` profile count remains unfiltered.
+
+`--min-stars N` restricts repository metrics to projects with at least N stars, after fork/archive exclusions. Profile-level public repository totals remain unfiltered and the analyzed count identifies the selected scope.
