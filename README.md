@@ -71,3 +71,5 @@ Read-only profile and repository requests retry one timeout, connection failure 
 `Analyzed Repositories` identifies the scope after optional exclusions; `Language Repositories` reports a sorted count by primary language. GitHub’s `Public Repositories` profile count remains unfiltered.
 
 `--min-stars N` restricts repository metrics to projects with at least N stars, after fork/archive exclusions. Profile-level public repository totals remain unfiltered and the analyzed count identifies the selected scope.
+
+Repeat `--language Python --language Rust` to restrict repository metrics by primary language, case-insensitively. It combines with existing fork, archive and star filters; the profile’s public count stays unfiltered.

@@ -74,11 +74,14 @@ def request_with_retry(client, url, **options):
                 raise
 
 
-def fetch_github_data(username, session=None, exclude_forks=False, exclude_archived=False, token=None, min_stars=0):
+def fetch_github_data(username, session=None, exclude_forks=False, exclude_archived=False, token=None, min_stars=0, languages=None):
     """Fetch profile statistics and all public repositories with bounded requests."""
     validate_username(username)
     if not isinstance(min_stars, int) or isinstance(min_stars, bool) or min_stars < 0:
         raise ValueError("min_stars must be a non-negative integer.")
+    if languages is not None and (not isinstance(languages, (list, tuple, set)) or any(not isinstance(value, str) or not value.strip() for value in languages)):
+        raise ValueError("languages must be a collection of non-empty language names.")
+    selected_languages = {value.strip().casefold() for value in languages or []}
     client = session or requests
     api_url = f"https://api.github.com/users/{username}"
     repos_url = f"{api_url}/repos"
@@ -126,6 +129,8 @@ def fetch_github_data(username, session=None, exclude_forks=False, exclude_archi
     if exclude_archived:
         repos_data = [repository for repository in repos_data if not repository.get("archived", False)]
     repos_data = [repo for repo in repos_data if repo.get("stargazers_count", 0) >= min_stars]
+    if selected_languages:
+        repos_data = [repo for repo in repos_data if (repo.get("language") or "").casefold() in selected_languages]
     total_stars = sum(repo.get("stargazers_count", 0) for repo in repos_data)
     forked_repositories = sum(1 for repo in repos_data if repo.get("fork") is True)
     original_repositories = len(repos_data) - forked_repositories
@@ -165,6 +170,7 @@ def main(argv=None):
     parser.add_argument("--exclude-forks", action="store_true", help="Exclude forks from repository metrics")
     parser.add_argument("--exclude-archived", action="store_true", help="Exclude archived repositories from metrics")
     parser.add_argument("--min-stars", type=int, default=0, help="Include only repositories with at least this many stars")
+    parser.add_argument("--language", action="append", default=[], help="Restrict repository metrics to a primary language (repeatable, case-insensitive)")
     args = parser.parse_args(argv)
     if not args.json:
         print("Fetching GitHub data...")
@@ -178,6 +184,8 @@ def main(argv=None):
             options["exclude_archived"] = True
         if args.min_stars:
             options["min_stars"] = args.min_stars
+        if args.language:
+            options["languages"] = args.language
         stats = fetch_github_data(args.username, **options)
     except (requests.RequestException, ValueError) as exc:
         parser.exit(1, f"Error fetching GitHub profile: {exc}\n")
