@@ -73,3 +73,5 @@ Read-only profile and repository requests retry one timeout, connection failure 
 `--min-stars N` restricts repository metrics to projects with at least N stars, after fork/archive exclusions. Profile-level public repository totals remain unfiltered and the analyzed count identifies the selected scope.
 
 Repeat `--language Python --language Rust` to restrict repository metrics by primary language, case-insensitively. It combines with existing fork, archive and star filters; the profile’s public count stays unfiltered.
+
+`--output summary.json` atomically saves the same profile metrics as the terminal report. A failed serialization or replacement preserves the previous file; it can be combined with `--json` stdout.

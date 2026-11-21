@@ -1,4 +1,6 @@
 import argparse
+import tempfile
+from pathlib import Path
 import json
 import os
 import re
@@ -163,6 +165,22 @@ def display_data(data):
     print("================================\n")
 
 
+def export_profile_json(stats, destination):
+    destination = Path(destination).expanduser()
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=destination.parent, delete=False) as handle:
+            temporary = Path(handle.name)
+            json.dump(stats, handle, ensure_ascii=False, allow_nan=False, indent=2)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, destination)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Summarize a public GitHub profile.")
     parser.add_argument("username", nargs="?", default=USERNAME, help="GitHub username to analyze")
@@ -171,6 +189,7 @@ def main(argv=None):
     parser.add_argument("--exclude-archived", action="store_true", help="Exclude archived repositories from metrics")
     parser.add_argument("--min-stars", type=int, default=0, help="Include only repositories with at least this many stars")
     parser.add_argument("--language", action="append", default=[], help="Restrict repository metrics to a primary language (repeatable, case-insensitive)")
+    parser.add_argument("--output", help="Atomically save the profile summary as JSON")
     args = parser.parse_args(argv)
     if not args.json:
         print("Fetching GitHub data...")
@@ -189,6 +208,11 @@ def main(argv=None):
         stats = fetch_github_data(args.username, **options)
     except (requests.RequestException, ValueError) as exc:
         parser.exit(1, f"Error fetching GitHub profile: {exc}\n")
+    if args.output:
+        try:
+            export_profile_json(stats, args.output)
+        except (OSError, ValueError) as exc:
+            parser.exit(1, f"Error saving profile summary: {exc}\n")
     if args.json:
         print(json.dumps(stats, ensure_ascii=False))
     else:
