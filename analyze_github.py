@@ -51,6 +51,8 @@ def _validate_repository_page(payload, page):
             )
         if "archived" in repository and not isinstance(repository["archived"], bool):
             raise ValueError(f"GitHub repository entry {index} on page {page} has an invalid archived flag.")
+        if "topics" in repository and (not isinstance(repository["topics"], list) or any(not isinstance(topic, str) or not topic.strip() for topic in repository["topics"])):
+            raise ValueError(f"GitHub repository entry {index} on page {page} has invalid topics.")
         language = repository.get("language")
         if language is not None and not isinstance(language, str):
             raise ValueError(
@@ -76,7 +78,7 @@ def request_with_retry(client, url, **options):
                 raise
 
 
-def fetch_github_data(username, session=None, exclude_forks=False, exclude_archived=False, token=None, min_stars=0, languages=None):
+def fetch_github_data(username, session=None, exclude_forks=False, exclude_archived=False, token=None, min_stars=0, languages=None, topics=None):
     """Fetch profile statistics and all public repositories with bounded requests."""
     validate_username(username)
     if not isinstance(min_stars, int) or isinstance(min_stars, bool) or min_stars < 0:
@@ -84,6 +86,9 @@ def fetch_github_data(username, session=None, exclude_forks=False, exclude_archi
     if languages is not None and (not isinstance(languages, (list, tuple, set)) or any(not isinstance(value, str) or not value.strip() for value in languages)):
         raise ValueError("languages must be a collection of non-empty language names.")
     selected_languages = {value.strip().casefold() for value in languages or []}
+    if topics is not None and (not isinstance(topics, (list, tuple, set)) or any(not isinstance(value, str) or not value.strip() for value in topics)):
+        raise ValueError("topics must be a collection of non-empty names.")
+    selected_topics = {value.strip().casefold() for value in topics or []}
     client = session or requests
     api_url = f"https://api.github.com/users/{username}"
     repos_url = f"{api_url}/repos"
@@ -133,6 +138,8 @@ def fetch_github_data(username, session=None, exclude_forks=False, exclude_archi
     repos_data = [repo for repo in repos_data if repo.get("stargazers_count", 0) >= min_stars]
     if selected_languages:
         repos_data = [repo for repo in repos_data if (repo.get("language") or "").casefold() in selected_languages]
+    if selected_topics:
+        repos_data = [repo for repo in repos_data if selected_topics.intersection(topic.casefold() for topic in repo.get("topics", []))]
     total_stars = sum(repo.get("stargazers_count", 0) for repo in repos_data)
     forked_repositories = sum(1 for repo in repos_data if repo.get("fork") is True)
     original_repositories = len(repos_data) - forked_repositories
@@ -190,6 +197,7 @@ def main(argv=None):
     parser.add_argument("--min-stars", type=int, default=0, help="Include only repositories with at least this many stars")
     parser.add_argument("--language", action="append", default=[], help="Restrict repository metrics to a primary language (repeatable, case-insensitive)")
     parser.add_argument("--output", help="Atomically save the profile summary as JSON")
+    parser.add_argument("--topic", action="append", default=[], help="Include repositories matching any selected topic (repeatable)")
     args = parser.parse_args(argv)
     if not args.json:
         print("Fetching GitHub data...")
@@ -205,6 +213,8 @@ def main(argv=None):
             options["min_stars"] = args.min_stars
         if args.language:
             options["languages"] = args.language
+        if args.topic:
+            options["topics"] = args.topic
         stats = fetch_github_data(args.username, **options)
     except (requests.RequestException, ValueError) as exc:
         parser.exit(1, f"Error fetching GitHub profile: {exc}\n")
