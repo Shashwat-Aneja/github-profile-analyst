@@ -178,10 +178,15 @@ def fetch_github_data(username, session=None, exclude_forks=False, exclude_archi
     return summary
 
 
+def safe_terminal_text(value):
+    """Render control characters visibly while preserving printable Unicode."""
+    return "".join(char if char.isprintable() else repr(char)[1:-1] for char in str(value))
+
+
 def display_data(data):
     print("\n=== GitHub Profile Analysis ===")
     for key, value in data.items():
-        print(f"{key}: {value}")
+        print(f"{safe_terminal_text(key)}: {safe_terminal_text(value)}")
     print("================================\n")
 
 
