@@ -78,7 +78,7 @@ def request_with_retry(client, url, **options):
                 raise
 
 
-def fetch_github_data(username, session=None, exclude_forks=False, exclude_archived=False, token=None, min_stars=0, languages=None, topics=None):
+def fetch_github_data(username, session=None, exclude_forks=False, exclude_archived=False, token=None, min_stars=0, languages=None, topics=None, top_repositories=0):
     """Fetch profile statistics and all public repositories with bounded requests."""
     validate_username(username)
     if not isinstance(min_stars, int) or isinstance(min_stars, bool) or min_stars < 0:
@@ -89,6 +89,8 @@ def fetch_github_data(username, session=None, exclude_forks=False, exclude_archi
     if topics is not None and (not isinstance(topics, (list, tuple, set)) or any(not isinstance(value, str) or not value.strip() for value in topics)):
         raise ValueError("topics must be a collection of non-empty names.")
     selected_topics = {value.strip().casefold() for value in topics or []}
+    if isinstance(top_repositories, bool) or not isinstance(top_repositories, int) or not 0 <= top_repositories <= 100:
+        raise ValueError("top_repositories must be an integer from 0 to 100.")
     client = session or requests
     api_url = f"https://api.github.com/users/{username}"
     repos_url = f"{api_url}/repos"
@@ -150,7 +152,7 @@ def fetch_github_data(username, session=None, exclude_forks=False, exclude_archi
             languages[language] = languages.get(language, 0) + 1
 
     most_used_language = min(languages, key=lambda language: (-languages[language], language)) if languages else "Not available"
-    return {
+    summary = {
         "Username": username,
         "Name": user_data.get("name") or "Not available",
         "Public Repositories": user_data.get("public_repos", "Not available"),
@@ -164,11 +166,27 @@ def fetch_github_data(username, session=None, exclude_forks=False, exclude_archi
         "Most Used Language": most_used_language,
     }
 
+    if top_repositories:
+        if any(not isinstance(repo.get("name"), str) or not repo["name"].strip() for repo in repos_data):
+            raise ValueError("Repository ranking requires non-empty repository names.")
+        ranked = sorted(repos_data, key=lambda repo: (-repo.get("stargazers_count", 0), repo["name"].casefold(), repo["name"]))
+        summary["Top Repositories"] = [
+            {"name": repo["name"], "stars": repo.get("stargazers_count", 0),
+             "language": repo.get("language"), "url": repo.get("html_url")}
+            for repo in ranked[:top_repositories]
+        ]
+    return summary
+
+
+def safe_terminal_text(value):
+    """Render control characters visibly while preserving printable Unicode."""
+    return "".join(char if char.isprintable() else repr(char)[1:-1] for char in str(value))
+
 
 def display_data(data):
     print("\n=== GitHub Profile Analysis ===")
     for key, value in data.items():
-        print(f"{key}: {value}")
+        print(f"{safe_terminal_text(key)}: {safe_terminal_text(value)}")
     print("================================\n")
 
 
@@ -198,6 +216,7 @@ def main(argv=None):
     parser.add_argument("--language", action="append", default=[], help="Restrict repository metrics to a primary language (repeatable, case-insensitive)")
     parser.add_argument("--output", help="Atomically save the profile summary as JSON")
     parser.add_argument("--topic", action="append", default=[], help="Include repositories matching any selected topic (repeatable)")
+    parser.add_argument("--top-repositories", type=int, default=0, help="Include up to 100 repositories ranked by stars (0 disables)")
     args = parser.parse_args(argv)
     if not args.json:
         print("Fetching GitHub data...")
@@ -215,6 +234,8 @@ def main(argv=None):
             options["languages"] = args.language
         if args.topic:
             options["topics"] = args.topic
+        if args.top_repositories:
+            options["top_repositories"] = args.top_repositories
         stats = fetch_github_data(args.username, **options)
     except (requests.RequestException, ValueError) as exc:
         parser.exit(1, f"Error fetching GitHub profile: {exc}\n")

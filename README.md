@@ -77,3 +77,5 @@ Repeat `--language Python --language Rust` to restrict repository metrics by pri
 `--output summary.json` atomically saves the same profile metrics as the terminal report. A failed serialization or replacement preserves the previous file; it can be combined with `--json` stdout.
 
 Repeat `--topic automation --topic python` to include repositories matching any selected primary topic tag, alongside existing language/star/archive/fork filters. Topic names are case-insensitive; repositories without topic metadata do not match.
+
+Use `--top-repositories 5` to include a deterministic star-ranked list within the selected filters. Counts still cover all analyzed repositories; missing API URLs are null. The limit is 0–100 (0 disables ranking).
