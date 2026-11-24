@@ -79,3 +79,5 @@ Repeat `--language Python --language Rust` to restrict repository metrics by pri
 Repeat `--topic automation --topic python` to include repositories matching any selected primary topic tag, alongside existing language/star/archive/fork filters. Topic names are case-insensitive; repositories without topic metadata do not match.
 
 Use `--top-repositories 5` to include a deterministic star-ranked list within the selected filters. Counts still cover all analyzed repositories; missing API URLs are null. The limit is 0–100 (0 disables ranking).
+
+Repeat `--license MIT --license Apache-2.0` to filter analyzed repositories by any selected SPDX identifier, case-insensitively. Missing license metadata is excluded; the filter scopes aggregates and rankings. This reports GitHub metadata and is not a legal license audit.
