@@ -78,7 +78,7 @@ def request_with_retry(client, url, **options):
                 raise
 
 
-def fetch_github_data(username, session=None, exclude_forks=False, exclude_archived=False, token=None, min_stars=0, languages=None, topics=None, top_repositories=0):
+def fetch_github_data(username, session=None, exclude_forks=False, exclude_archived=False, token=None, min_stars=0, languages=None, topics=None, top_repositories=0, licenses=None, max_pages=None):
     """Fetch profile statistics and all public repositories with bounded requests."""
     validate_username(username)
     if not isinstance(min_stars, int) or isinstance(min_stars, bool) or min_stars < 0:
@@ -91,6 +91,13 @@ def fetch_github_data(username, session=None, exclude_forks=False, exclude_archi
     selected_topics = {value.strip().casefold() for value in topics or []}
     if isinstance(top_repositories, bool) or not isinstance(top_repositories, int) or not 0 <= top_repositories <= 100:
         raise ValueError("top_repositories must be an integer from 0 to 100.")
+    if licenses is not None and (not isinstance(licenses, (list, tuple, set)) or any(not isinstance(value, str) or not value.strip() for value in licenses)):
+        raise ValueError("licenses must be a collection of non-empty SPDX identifiers.")
+    selected_licenses = {value.strip().casefold() for value in licenses or []}
+    if max_pages is None:
+        max_pages = MAX_REPOSITORY_PAGES
+    if isinstance(max_pages, bool) or not isinstance(max_pages, int) or not 1 <= max_pages <= MAX_REPOSITORY_PAGES:
+        raise ValueError("max_pages must be an integer from 1 to 1000.")
     client = session or requests
     api_url = f"https://api.github.com/users/{username}"
     repos_url = f"{api_url}/repos"
@@ -114,7 +121,7 @@ def fetch_github_data(username, session=None, exclude_forks=False, exclude_archi
     seen_repository_ids = set()
     page = 1
     while True:
-        if page > MAX_REPOSITORY_PAGES:
+        if page > max_pages:
             raise ValueError("GitHub repository pagination exceeded the safety page limit.")
         response = request_with_retry(
             client, repos_url,
@@ -142,6 +149,17 @@ def fetch_github_data(username, session=None, exclude_forks=False, exclude_archi
         repos_data = [repo for repo in repos_data if (repo.get("language") or "").casefold() in selected_languages]
     if selected_topics:
         repos_data = [repo for repo in repos_data if selected_topics.intersection(topic.casefold() for topic in repo.get("topics", []))]
+    if selected_licenses:
+        selected = []
+        for repo in repos_data:
+            license_info = repo.get("license")
+            if license_info is None:
+                continue
+            if not isinstance(license_info, dict) or not isinstance(license_info.get("spdx_id"), str) or not license_info["spdx_id"].strip():
+                raise ValueError("Repository license metadata must contain an SPDX identifier.")
+            if license_info["spdx_id"].casefold() in selected_licenses:
+                selected.append(repo)
+        repos_data = selected
     total_stars = sum(repo.get("stargazers_count", 0) for repo in repos_data)
     forked_repositories = sum(1 for repo in repos_data if repo.get("fork") is True)
     original_repositories = len(repos_data) - forked_repositories
@@ -217,6 +235,8 @@ def main(argv=None):
     parser.add_argument("--output", help="Atomically save the profile summary as JSON")
     parser.add_argument("--topic", action="append", default=[], help="Include repositories matching any selected topic (repeatable)")
     parser.add_argument("--top-repositories", type=int, default=0, help="Include up to 100 repositories ranked by stars (0 disables)")
+    parser.add_argument("--license", action="append", default=[], help="Include repositories matching an SPDX license ID (repeatable, case-insensitive)")
+    parser.add_argument("--max-pages", type=int, default=MAX_REPOSITORY_PAGES, help="Bound repository page requests (1–1000); incomplete pagination fails without publishing partial metrics")
     args = parser.parse_args(argv)
     if not args.json:
         print("Fetching GitHub data...")
@@ -232,6 +252,10 @@ def main(argv=None):
             options["min_stars"] = args.min_stars
         if args.language:
             options["languages"] = args.language
+        if args.max_pages != MAX_REPOSITORY_PAGES:
+            options["max_pages"] = args.max_pages
+        if args.license:
+            options["licenses"] = args.license
         if args.topic:
             options["topics"] = args.topic
         if args.top_repositories:
