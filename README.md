@@ -81,3 +81,5 @@ Repeat `--topic automation --topic python` to include repositories matching any 
 Use `--top-repositories 5` to include a deterministic star-ranked list within the selected filters. Counts still cover all analyzed repositories; missing API URLs are null. The limit is 0–100 (0 disables ranking).
 
 Repeat `--license MIT --license Apache-2.0` to filter analyzed repositories by any selected SPDX identifier, case-insensitively. Missing license metadata is excluded; the filter scopes aggregates and rankings. This reports GitHub metadata and is not a legal license audit.
+
+`--max-pages N` bounds repository pagination work (1–1000, default 1000). If the last permitted page is full, completeness cannot be established and the analysis fails without partial metrics or replacing a prior export. The profile request is additional to this page budget.
