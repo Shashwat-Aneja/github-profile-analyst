@@ -4,6 +4,8 @@ from pathlib import Path
 import json
 import os
 import re
+import math
+from fnmatch import fnmatchcase
 
 import requests
 
@@ -78,7 +80,7 @@ def request_with_retry(client, url, **options):
                 raise
 
 
-def fetch_github_data(username, session=None, exclude_forks=False, exclude_archived=False, token=None, min_stars=0, languages=None, topics=None, top_repositories=0, licenses=None, max_pages=None):
+def fetch_github_data(username, session=None, exclude_forks=False, exclude_archived=False, token=None, min_stars=0, languages=None, topics=None, top_repositories=0, licenses=None, max_pages=None, timeout_seconds=API_TIMEOUT_SECONDS, exclude_repositories=None):
     """Fetch profile statistics and all public repositories with bounded requests."""
     validate_username(username)
     if not isinstance(min_stars, int) or isinstance(min_stars, bool) or min_stars < 0:
@@ -98,11 +100,20 @@ def fetch_github_data(username, session=None, exclude_forks=False, exclude_archi
         max_pages = MAX_REPOSITORY_PAGES
     if isinstance(max_pages, bool) or not isinstance(max_pages, int) or not 1 <= max_pages <= MAX_REPOSITORY_PAGES:
         raise ValueError("max_pages must be an integer from 1 to 1000.")
+    try:
+        timeout = float(timeout_seconds)
+    except (ValueError, TypeError, OverflowError) as exc:
+        raise ValueError("timeout_seconds must be a finite duration from 0 exclusive to 120 seconds.") from exc
+    if isinstance(timeout_seconds, bool) or not math.isfinite(timeout) or not 0 < timeout <= 120:
+        raise ValueError("timeout_seconds must be a finite duration from 0 exclusive to 120 seconds.")
+    if exclude_repositories is not None and (not isinstance(exclude_repositories, (list, tuple, set)) or len(exclude_repositories) > 100 or any(not isinstance(pattern, str) or not pattern.strip() or len(pattern) > 200 for pattern in exclude_repositories)):
+        raise ValueError("exclude_repositories must contain at most 100 non-empty name patterns of up to 200 characters.")
+    excluded_names = [pattern.strip().casefold() for pattern in exclude_repositories or []]
     client = session or requests
     api_url = f"https://api.github.com/users/{username}"
     repos_url = f"{api_url}/repos"
 
-    request_options = {"timeout": API_TIMEOUT_SECONDS}
+    request_options = {"timeout": timeout}
     if token is not None:
         if not isinstance(token, str) or not token.strip() or any(char.isspace() for char in token):
             raise ValueError("GitHub token must be a non-empty token without whitespace.")
@@ -160,6 +171,10 @@ def fetch_github_data(username, session=None, exclude_forks=False, exclude_archi
             if license_info["spdx_id"].casefold() in selected_licenses:
                 selected.append(repo)
         repos_data = selected
+    if excluded_names:
+        if any(not isinstance(repo.get("name"), str) or not repo["name"].strip() for repo in repos_data):
+            raise ValueError("Repository name exclusions require non-empty repository names.")
+        repos_data = [repo for repo in repos_data if not any(fnmatchcase(repo["name"].casefold(), pattern) for pattern in excluded_names)]
     total_stars = sum(repo.get("stargazers_count", 0) for repo in repos_data)
     forked_repositories = sum(1 for repo in repos_data if repo.get("fork") is True)
     original_repositories = len(repos_data) - forked_repositories
@@ -237,6 +252,8 @@ def main(argv=None):
     parser.add_argument("--top-repositories", type=int, default=0, help="Include up to 100 repositories ranked by stars (0 disables)")
     parser.add_argument("--license", action="append", default=[], help="Include repositories matching an SPDX license ID (repeatable, case-insensitive)")
     parser.add_argument("--max-pages", type=int, default=MAX_REPOSITORY_PAGES, help="Bound repository page requests (1–1000); incomplete pagination fails without publishing partial metrics")
+    parser.add_argument("--timeout-seconds", type=float, default=API_TIMEOUT_SECONDS, help="Per-request network timeout, greater than zero and at most 120 seconds")
+    parser.add_argument("--exclude-repository", action="append", default=[], help="Exclude matching short repository names using case-insensitive fnmatch (repeatable)")
     args = parser.parse_args(argv)
     if not args.json:
         print("Fetching GitHub data...")
@@ -252,6 +269,10 @@ def main(argv=None):
             options["min_stars"] = args.min_stars
         if args.language:
             options["languages"] = args.language
+        if args.exclude_repository:
+            options["exclude_repositories"] = args.exclude_repository
+        if args.timeout_seconds != API_TIMEOUT_SECONDS:
+            options["timeout_seconds"] = args.timeout_seconds
         if args.max_pages != MAX_REPOSITORY_PAGES:
             options["max_pages"] = args.max_pages
         if args.license:
