@@ -4,6 +4,7 @@ from pathlib import Path
 import json
 import os
 import re
+import math
 
 import requests
 
@@ -78,7 +79,7 @@ def request_with_retry(client, url, **options):
                 raise
 
 
-def fetch_github_data(username, session=None, exclude_forks=False, exclude_archived=False, token=None, min_stars=0, languages=None, topics=None, top_repositories=0, licenses=None, max_pages=None):
+def fetch_github_data(username, session=None, exclude_forks=False, exclude_archived=False, token=None, min_stars=0, languages=None, topics=None, top_repositories=0, licenses=None, max_pages=None, timeout_seconds=API_TIMEOUT_SECONDS):
     """Fetch profile statistics and all public repositories with bounded requests."""
     validate_username(username)
     if not isinstance(min_stars, int) or isinstance(min_stars, bool) or min_stars < 0:
@@ -98,11 +99,17 @@ def fetch_github_data(username, session=None, exclude_forks=False, exclude_archi
         max_pages = MAX_REPOSITORY_PAGES
     if isinstance(max_pages, bool) or not isinstance(max_pages, int) or not 1 <= max_pages <= MAX_REPOSITORY_PAGES:
         raise ValueError("max_pages must be an integer from 1 to 1000.")
+    try:
+        timeout = float(timeout_seconds)
+    except (ValueError, TypeError, OverflowError) as exc:
+        raise ValueError("timeout_seconds must be a finite duration from 0 exclusive to 120 seconds.") from exc
+    if isinstance(timeout_seconds, bool) or not math.isfinite(timeout) or not 0 < timeout <= 120:
+        raise ValueError("timeout_seconds must be a finite duration from 0 exclusive to 120 seconds.")
     client = session or requests
     api_url = f"https://api.github.com/users/{username}"
     repos_url = f"{api_url}/repos"
 
-    request_options = {"timeout": API_TIMEOUT_SECONDS}
+    request_options = {"timeout": timeout}
     if token is not None:
         if not isinstance(token, str) or not token.strip() or any(char.isspace() for char in token):
             raise ValueError("GitHub token must be a non-empty token without whitespace.")
@@ -237,6 +244,7 @@ def main(argv=None):
     parser.add_argument("--top-repositories", type=int, default=0, help="Include up to 100 repositories ranked by stars (0 disables)")
     parser.add_argument("--license", action="append", default=[], help="Include repositories matching an SPDX license ID (repeatable, case-insensitive)")
     parser.add_argument("--max-pages", type=int, default=MAX_REPOSITORY_PAGES, help="Bound repository page requests (1–1000); incomplete pagination fails without publishing partial metrics")
+    parser.add_argument("--timeout-seconds", type=float, default=API_TIMEOUT_SECONDS, help="Per-request network timeout, greater than zero and at most 120 seconds")
     args = parser.parse_args(argv)
     if not args.json:
         print("Fetching GitHub data...")
@@ -252,6 +260,8 @@ def main(argv=None):
             options["min_stars"] = args.min_stars
         if args.language:
             options["languages"] = args.language
+        if args.timeout_seconds != API_TIMEOUT_SECONDS:
+            options["timeout_seconds"] = args.timeout_seconds
         if args.max_pages != MAX_REPOSITORY_PAGES:
             options["max_pages"] = args.max_pages
         if args.license:

@@ -83,3 +83,5 @@ Use `--top-repositories 5` to include a deterministic star-ranked list within th
 Repeat `--license MIT --license Apache-2.0` to filter analyzed repositories by any selected SPDX identifier, case-insensitively. Missing license metadata is excluded; the filter scopes aggregates and rankings. This reports GitHub metadata and is not a legal license audit.
 
 `--max-pages N` bounds repository pagination work (1–1000, default 1000). If the last permitted page is full, completeness cannot be established and the analysis fails without partial metrics or replacing a prior export. The profile request is additional to this page budget.
+
+`--timeout-seconds N` configures every profile and repository HTTP request, including retry attempts. The finite duration must be greater than zero and at most 120 seconds; the default remains 10. This is a per-request timeout, not a whole-analysis deadline.
