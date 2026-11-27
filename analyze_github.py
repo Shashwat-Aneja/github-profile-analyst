@@ -1,4 +1,5 @@
 import argparse
+from datetime import date, datetime, timezone
 import tempfile
 from pathlib import Path
 import json
@@ -80,9 +81,14 @@ def request_with_retry(client, url, **options):
                 raise
 
 
-def fetch_github_data(username, session=None, exclude_forks=False, exclude_archived=False, token=None, min_stars=0, languages=None, topics=None, top_repositories=0, licenses=None, max_pages=None, timeout_seconds=API_TIMEOUT_SECONDS, exclude_repositories=None):
+def fetch_github_data(username, session=None, exclude_forks=False, exclude_archived=False, token=None, min_stars=0, languages=None, topics=None, top_repositories=0, licenses=None, max_pages=None, timeout_seconds=API_TIMEOUT_SECONDS, exclude_repositories=None, pushed_since=None):
     """Fetch profile statistics and all public repositories with bounded requests."""
     validate_username(username)
+    cutoff = None
+    if pushed_since is not None:
+        if not isinstance(pushed_since, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", pushed_since):
+            raise ValueError("pushed_since must be a YYYY-MM-DD date.")
+        cutoff = date.fromisoformat(pushed_since)
     if not isinstance(min_stars, int) or isinstance(min_stars, bool) or min_stars < 0:
         raise ValueError("min_stars must be a non-negative integer.")
     if languages is not None and (not isinstance(languages, (list, tuple, set)) or any(not isinstance(value, str) or not value.strip() for value in languages)):
@@ -175,6 +181,23 @@ def fetch_github_data(username, session=None, exclude_forks=False, exclude_archi
         if any(not isinstance(repo.get("name"), str) or not repo["name"].strip() for repo in repos_data):
             raise ValueError("Repository name exclusions require non-empty repository names.")
         repos_data = [repo for repo in repos_data if not any(fnmatchcase(repo["name"].casefold(), pattern) for pattern in excluded_names)]
+    if cutoff is not None:
+        selected = []
+        for repo in repos_data:
+            stamp = repo.get("pushed_at")
+            if stamp is None:
+                continue
+            if not isinstance(stamp, str):
+                raise ValueError("Repository pushed_at must be an offset-aware timestamp.")
+            try:
+                instant = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+            except ValueError as exc:
+                raise ValueError("Repository pushed_at must be an offset-aware timestamp.") from exc
+            if instant.tzinfo is None or instant.utcoffset() is None:
+                raise ValueError("Repository pushed_at must include a UTC offset.")
+            if instant.astimezone(timezone.utc).date() >= cutoff:
+                selected.append(repo)
+        repos_data = selected
     total_stars = sum(repo.get("stargazers_count", 0) for repo in repos_data)
     forked_repositories = sum(1 for repo in repos_data if repo.get("fork") is True)
     original_repositories = len(repos_data) - forked_repositories
@@ -254,11 +277,14 @@ def main(argv=None):
     parser.add_argument("--max-pages", type=int, default=MAX_REPOSITORY_PAGES, help="Bound repository page requests (1–1000); incomplete pagination fails without publishing partial metrics")
     parser.add_argument("--timeout-seconds", type=float, default=API_TIMEOUT_SECONDS, help="Per-request network timeout, greater than zero and at most 120 seconds")
     parser.add_argument("--exclude-repository", action="append", default=[], help="Exclude matching short repository names using case-insensitive fnmatch (repeatable)")
+    parser.add_argument("--pushed-since", help="Include repositories pushed on or after this UTC date (YYYY-MM-DD)")
     args = parser.parse_args(argv)
     if not args.json:
         print("Fetching GitHub data...")
     try:
         options = {}
+        if args.pushed_since is not None:
+            options["pushed_since"] = args.pushed_since
         if os.environ.get("GITHUB_TOKEN"):
             options["token"] = os.environ["GITHUB_TOKEN"]
         if args.exclude_forks:
