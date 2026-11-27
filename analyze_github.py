@@ -207,6 +207,16 @@ def fetch_github_data(username, session=None, exclude_forks=False, exclude_archi
         if language:
             languages[language] = languages.get(language, 0) + 1
 
+    language_stars = {}
+    unspecified_stars = 0
+    unspecified_count = 0
+    for repo in repos_data:
+        language = repo.get("language")
+        if language:
+            language_stars[language] = language_stars.get(language, 0) + repo.get("stargazers_count", 0)
+        else:
+            unspecified_stars += repo.get("stargazers_count", 0)
+            unspecified_count += 1
     most_used_language = min(languages, key=lambda language: (-languages[language], language)) if languages else "Not available"
     summary = {
         "Username": username,
@@ -214,6 +224,9 @@ def fetch_github_data(username, session=None, exclude_forks=False, exclude_archi
         "Public Repositories": user_data.get("public_repos", "Not available"),
         "Analyzed Repositories": len(repos_data),
         "Language Repositories": dict(sorted(languages.items())),
+        "Language Stars": dict(sorted(language_stars.items())),
+        "Unspecified Language Stars": unspecified_stars,
+        "Unspecified Language Repositories": unspecified_count,
         "Original Repositories": original_repositories,
         "Forked Repositories": forked_repositories,
         "Followers": user_data.get("followers", "Not available"),
