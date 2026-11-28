@@ -87,3 +87,7 @@ Repeat `--license MIT --license Apache-2.0` to filter analyzed repositories by a
 `--timeout-seconds N` configures every profile and repository HTTP request, including retry attempts. The finite duration must be greater than zero and at most 120 seconds; the default remains 10. This is a per-request timeout, not a whole-analysis deadline.
 
 Repeat `--exclude-repository "website-*"` to exclude short repository names from every metric and ranking. Matching uses case-insensitive fnmatch within the already selected repository scope. Up to 100 patterns of 200 characters each are accepted.
+
+`--pushed-since YYYY-MM-DD` restricts all repository metrics and rankings to pushes on/after that inclusive UTC date. Null push dates are excluded; malformed or offset-free timestamps fail when this filter is enabled. Account-level counters retain their account scope.
+
+`Language Stars` aggregates stars by primary language within the selected repository population. Unspecified-language stars and repository counts disclose coverage; these stars reconcile with Total Stars. Most Used Language continues to rank repository counts.
